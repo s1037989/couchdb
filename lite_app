@@ -1,0 +1,56 @@
+#!/usr/bin/perl
+use Mojolicious::Lite;
+use FindBin;
+use lib "$FindBin::Bin/lib";
+
+plugin 'JqueryHelpers';
+plugin 'CouchDB';
+plugin 'Dumper';
+plugin 'IsXHR';
+
+get '/' => 'index';
+get '/blocking' => sub {
+	my $self = shift;
+	@_ = (
+		$self->couchdb->info,
+		$self->couchdb->info,
+	);
+	return $self->is_xhr ? $self->render(json=>\@_) : $self->render_dumper(@_);
+};
+get '/non-blocking' => sub {
+	my $self = shift;
+	$self->render_later;
+        my $delay = Mojo::IOLoop->delay(sub {
+                my $delay = shift;
+		return $self->is_xhr ? $self->render(json=>\@_) : $self->render_dumper(@_);
+        });
+	$self->couchdb->info($delay->begin);
+	$self->couchdb->info($delay->begin);
+};
+
+app->start;
+
+__DATA__
+
+@@ index.html.ep
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Welcome</title>
+    %== jquery_init
+    <script type="text/javascript">
+      $(document).ready(function(){
+	$("#b").click(function(){$.get("<%= url_for 'blocking' %>");});
+	$("#nb").click(function(){$.get("<%= url_for 'non-blocking' %>");});
+      });
+    </script>
+    <style>
+      span {cursor:pointer;text-decoration:underline}
+    </style>
+  </head>
+  <body>
+    Welcome to the Mojolicious real-time web framework!<br />
+    %= localtime;
+    <p>Query local CouchDB server:<br /><span id="b">Blocking</span> - OR - <span id="nb">Non-Blocking</span></p>
+  </body>
+</html>

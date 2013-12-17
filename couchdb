@@ -1,0 +1,79 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+# git clone git://github.com/kraih/mojo.git
+#use FindBin;
+#use lib "$FindBin::Bin/mojo/lib";
+
+
+# http://mojolicio.us/
+use Mojo::UserAgent;
+use Data::Dumper;
+
+my $couch = 'http://127.0.0.1:5984/';
+
+my $ua = Mojo::UserAgent->new;
+
+my $json = $ua->get( $couch )->res->json;
+
+sub dumper { print Data::Dumper->new([@_])->Maxdepth(4)->Indent(1)->Terse(1)->Dump };
+
+# db version
+dumper( $json );
+
+# create test db
+my $create = $ua->put( $couch.'/test' )->res->json;
+dumper( $create );
+
+my $doc = { foo => 'bar' };
+
+# put a doc into the test db
+my $r = $ua->post( $couch.'/test' => { 'Content-Type' => 'application/json' } => Mojo::JSON->encode($doc) )->res->json;
+
+dumper( $r );
+
+# success
+if ( $r->{id} ) {
+    # copy id and rev
+    # the result has our id auto generated for us
+    @$doc{qw( _id _rev )} = @$r{qw( id rev )};
+
+    $doc->{mojolicious} = 'awesome';
+
+    # update the doc in the db
+    $doc = $ua->post( $couch.'/test' => { 'Content-Type' => 'application/json' } => Mojo::JSON->encode($doc) )->res->json;
+
+    dumper( $doc );
+
+    # pull it back out
+    $r = $ua->get( $couch.'/test/'.$doc->{_id} )->res->json;
+
+    dumper( $r );
+}
+
+my $docs = [
+    {
+        bar => {
+            baz => 123
+        }
+    }
+];
+
+push(@$docs, {
+    foo => 123
+});
+
+# insert bulk docs
+$r = $ua->post( $couch.'/test/_bulk_docs' => { 'Content-Type' => 'application/json' } => Mojo::JSON->encode({ docs => $docs }) )->res->json;
+
+dumper( $r );
+
+# update the docs array with the ids returned
+foreach my $i ( 0 .. $#{$r} ) {
+    # notice rev and id returned here don't have an understore
+    @{$docs->[ $i ]}{qw( _id _rev )} = @{$r->[ $i ]}{qw( id rev )};
+}
+
+dumper( $docs );
